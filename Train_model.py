@@ -1,41 +1,36 @@
-#Training the classifier model for ISL
-#using pickle datasets which contains bytes of information from the extracted landmarks
-
 import pickle
-import numpy
 import numpy as np
-from sklearn.ensemble import RandomForestClassifier
+from keras.models import Sequential
+from keras.layers import LSTM, Dense
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score
-from keras.preprocessing.sequence import pad_sequences  # Import pad_sequences
+from keras.utils import to_categorical
 
+# Load dataset
+with open('data.pickle', 'rb') as f:
+    data = pickle.load(f)
 
+X = np.array(data['data'])
+y = to_categorical(np.array(data['labels']))
 
+# Padding sequences
+max_length = max(len(seq) for seq in X)
+X_padded = np.zeros((len(X), max_length))
+for i, seq in enumerate(X):
+    X_padded[i, :len(seq)] = seq
 
-data_dict = pickle.load(open('./data.pickle' , 'rb'))
+# Train-test split
+x_train, x_test, y_train, y_test = train_test_split(X_padded, y, test_size=0.2, stratify=y)
 
-# print(type(data_dict['data']))
-# print(len(data_dict['data']))
-# for i, item in enumerate(data_dict['data']):
-#     print(f"Item {i}: {type(item)}, Length: {len(item) if hasattr(item, '__len__') else 'N/A'}")
+# Model
+model = Sequential([
+    LSTM(64, return_sequences=True, input_shape=(X_padded.shape[1], 1)),
+    LSTM(64),
+    Dense(64, activation='relu'),
+    Dense(y.shape[1], activation='softmax')
+])
 
-#data = np.asarray(data_dict['data'])
-padded_data = pad_sequences(data_dict['data'], padding='post')
-labels = np.asarray(data_dict['labels'])
+model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
+model.fit(x_train, y_train, epochs=50, batch_size=32, validation_data=(x_test, y_test))
 
-x_train, x_test , y_train, y_test = train_test_split(padded_data, labels , test_size=0.2,
-                                                     shuffle=True,
-                                                     stratify=labels)
-model = RandomForestClassifier()
-model.fit(x_train, y_train)
-
-y_predict = model.predict(x_test)
-
-
-score = accuracy_score(y_predict , y_test)
-print('{}% of samples were classified correctly!'.format(score*100))
-
-f= open('model.p' , 'wb')
-pickle.dump({'model' : model} , f)
-f.close()
-
+# Save model
+model.save('models/gesture_model.h5')
